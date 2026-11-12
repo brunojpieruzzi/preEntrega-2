@@ -38,3 +38,13 @@ class EntidadesTecnicas(BaseModel):
         if not limpias:
             raise ValueError("La lista de tecnologías no puede estar vacía")
         return limpias
+
+
+class ClasificacionTema(BaseModel):
+    """Resultado del guardrail: ¿el texto es de contenido técnico de software/infraestructura?"""
+
+    es_tecnico: bool = Field(
+        ...,
+        description="True solo si el texto describe arquitectura, código, infraestructura, logs o errores técnicos.",
+    )
+    motivo: str = Field(..., description="Justificación breve (una oración) de la decisión.")

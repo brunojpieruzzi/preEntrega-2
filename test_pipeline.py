@@ -5,7 +5,7 @@ import logging
 
 from pydantic import ValidationError
 
-from chain import process_text
+from chain import FueraDeTemaError, process_text
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -19,12 +19,18 @@ TEXTO_CLARO = (
 TEXTO_AMBIGUO = "Algo anda lento desde ayer, creo que es la base o quizás el servidor. Revisen."
 
 
+# Guardrail: tema no técnico (debe ser rechazado).
+TEXTO_FUERA_DE_TEMA = "¿Me das una receta de milanesas con puré y algún consejo para que queden crocantes?"
+
+
 async def main() -> None:
-    for nombre, texto in [("CLARO", TEXTO_CLARO), ("AMBIGUO", TEXTO_AMBIGUO)]:
+    for nombre, texto in [("CLARO", TEXTO_CLARO), ("AMBIGUO", TEXTO_AMBIGUO), ("FUERA DE TEMA", TEXTO_FUERA_DE_TEMA)]:
         print(f"\n=== Caso {nombre} ===")
         try:
             resultado = await process_text(texto)
             print(resultado.model_dump_json(indent=2))
+        except FueraDeTemaError as exc:
+            print(f"Guardrail: texto rechazado -> {exc}")
         except ValidationError as exc:
             print(f"El validador rechazó la salida tras los reintentos:\n{exc}")
         except Exception as exc:  # noqa: BLE001

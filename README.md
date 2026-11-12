@@ -17,6 +17,7 @@ Recibe un texto sin procesar (descripción de arquitectura, log de error) y devu
 - **Cadena LCEL**: `prompt | model.with_structured_output(EntidadesTecnicas, include_raw=True) | validación`.
 - **Resiliencia**: `.with_retry()` (hasta 3 intentos, backoff exponencial con jitter) ante `ValidationError`, `OutputParserException` o `RespuestaIncompletaError`.
 - **`finish_reason`**: el paso de validación inspecciona `finish_reason` / `stop_reason`; si es `length` / `max_tokens` la respuesta se considera incompleta y se reintenta antes de usarla.
+- **Guardrail**: antes de extraer, un clasificador (`ClasificacionTema`) decide si el texto es técnico; si no, `process_text()` lanza `FueraDeTemaError` sin gastar la extracción. También rechaza textos vacíos o de más de 8000 caracteres, y el prompt trata el texto como datos (mitiga prompt injection).
 - **Logs**: módulo `logging` (logger `pipeline`) registra inicio, truncamientos, errores de validación y resultado final.
 
 ## Instalación y uso
