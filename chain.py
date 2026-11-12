@@ -1,0 +1,124 @@
+"""Cadena LCEL: Prompt + LLM (structured output) + validación + reintentos."""
+
+import logging
+import os
+
+from dotenv import load_dotenv
+from langchain_core.exceptions import OutputParserException
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable, RunnableLambda
+from pydantic import ValidationError
+
+from schemas import EntidadesTecnicas
+
+load_dotenv()
+
+logger = logging.getLogger("pipeline")
+
+MAX_REINTENTOS = 3
+
+
+class RespuestaIncompletaError(Exception):
+    """El LLM cortó la respuesta (finish_reason=length) o no devolvió un objeto válido."""
+
+
+# --------------------------------------------------------------------------- #
+# 1. Cliente LLM (OpenAI por defecto; Anthropic con LLM_PROVIDER=anthropic)
+# --------------------------------------------------------------------------- #
+def build_model():
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    if provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+
+        return ChatAnthropic(
+            model=os.getenv("LLM_MODEL", "claude-haiku-4-5"),
+            temperature=0,
+            max_tokens=1024,
+        )
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+        temperature=0,
+        max_tokens=1024,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 2. Prompt template (sin f-strings: las variables las gestiona LangChain)
+# --------------------------------------------------------------------------- #
+prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "Eres un analista técnico senior. Extrae entidades técnicas del texto del usuario.\n"
+            "Reglas:\n"
+            "- `tecnologias`: todas las tecnologías, frameworks, lenguajes o servicios "
+            "mencionados (nunca vacío; si el texto es ambiguo, infiere las más probables).\n"
+            "- `nivel_de_criticidad`: una de {niveles}.\n"
+            "- `resumen_tecnico`: 1-2 oraciones en español, concisas y técnicas.\n"
+            "Responde solo con la estructura solicitada.",
+        ),
+        ("human", "Texto a analizar:\n\n{texto}"),
+    ]
+).partial(niveles="baja, media, alta")
+
+
+# --------------------------------------------------------------------------- #
+# 3. Validación post-LLM: detecta cortes por tokens y JSON mal formado
+# --------------------------------------------------------------------------- #
+def _validar_resultado(resultado: dict) -> EntidadesTecnicas:
+    raw = resultado.get("raw")
+    meta = getattr(raw, "response_metadata", {}) or {}
+    finish = meta.get("finish_reason") or meta.get("stop_reason")
+
+    if finish in ("length", "max_tokens"):
+        logger.warning("Respuesta truncada (finish_reason=%s): se reintentará", finish)
+        raise RespuestaIncompletaError(f"Respuesta truncada: finish_reason={finish}")
+
+    if resultado.get("parsing_error") is not None:
+        logger.warning("Error de parseo/validación: %s", resultado["parsing_error"])
+        error = resultado["parsing_error"]
+        if isinstance(error, (ValidationError, OutputParserException)):
+            raise error
+        raise OutputParserException(f"Salida mal formada: {error}") from error
+
+    parsed = resultado.get("parsed")
+    if parsed is None:
+        logger.warning("El modelo no devolvió un objeto estructurado")
+        raise RespuestaIncompletaError("Sin objeto estructurado en la respuesta")
+
+    logger.info("Validación OK (finish_reason=%s)", finish)
+    return parsed
+
+
+# --------------------------------------------------------------------------- #
+# 4. Cadena LCEL + resiliencia
+# --------------------------------------------------------------------------- #
+def build_chain(model=None) -> Runnable:
+    model = model or build_model()
+    structured = model.with_structured_output(EntidadesTecnicas, include_raw=True)
+    chain = prompt | structured | RunnableLambda(_validar_resultado)
+    return chain.with_retry(
+        retry_if_exception_type=(
+            ValidationError,
+            OutputParserException,
+            RespuestaIncompletaError,
+        ),
+        wait_exponential_jitter=True,
+        stop_after_attempt=MAX_REINTENTOS,
+    )
+
+
+_chain: Runnable | None = None
+
+
+async def process_text(text: str) -> EntidadesTecnicas:
+    """Procesa un texto y devuelve un `EntidadesTecnicas` validado."""
+    global _chain
+    if _chain is None:
+        _chain = build_chain()
+    logger.info("Procesando texto (%d caracteres)", len(text))
+    resultado = await _chain.ainvoke({"texto": text})
+    logger.info("Resultado: %s", resultado.model_dump_json())
+    return resultado
