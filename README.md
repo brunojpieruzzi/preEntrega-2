@@ -54,6 +54,28 @@ print(asyncio.run(process_text("API FastAPI con Redis y PostgreSQL, se agotan la
 }
 ```
 
+## Salida real (ejecución con Anthropic)
+
+Entrada:
+
+> Nuestra API en FastAPI usa Redis como caché y PostgreSQL para persistencia. En producción vemos timeouts: el pool de conexiones a PostgreSQL se agota bajo carga concurrente y los usuarios no pueden operar.
+
+Salida:
+
+```json
+{
+  "tecnologias": ["FastAPI", "Redis", "PostgreSQL", "Connection Pool"],
+  "nivel_de_criticidad": "alta",
+  "resumen_tecnico": "API en FastAPI con caché Redis y persistencia en PostgreSQL experimenta timeouts en producción por agotamiento del pool de conexiones bajo carga concurrente, impactando la disponibilidad del servicio."
+}
+```
+
+Texto fuera de tema (guardrail):
+
+```
+Guardrail: texto rechazado -> El texto solicita una receta de cocina y consejos culinarios, que no constituyen contenido técnico de software o infraestructura.
+```
+
 ## Prueba de estrés (texto ambiguo)
 
 `test_pipeline.py` incluye un texto sin tecnologías explícitas. Si el modelo devuelve una lista vacía, el validador de Pydantic lanza `ValidationError`, se reintenta y, si se agotan los intentos, el error se muestra de forma controlada en lugar de propagar datos inválidos.
