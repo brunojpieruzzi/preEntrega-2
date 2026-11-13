@@ -8,6 +8,7 @@ Recibe un texto sin procesar (descripción de arquitectura, log de error) y devu
 |---|---|
 | `schemas.py` | Modelo Pydantic `EntidadesTecnicas` (+ enum `NivelCriticidad`) |
 | `chain.py` | Cliente LLM, `ChatPromptTemplate`, cadena LCEL, reintentos y `process_text()` async |
+| `main.py` | CLI interactiva: escribís tu propio texto y obtenés el JSON validado |
 | `test_pipeline.py` | Mini-script asíncrono (caso claro + caso ambiguo) |
 
 ## Diseño
@@ -27,7 +28,9 @@ python -m venv .venv
 .venv\Scripts\activate        # Linux/Mac: source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env          # y completar la API key
-python test_pipeline.py
+python main.py                # modo interactivo con tu propio texto
+python main.py "Error 500 en nginx por timeout con Django"   # una consulta
+python test_pipeline.py       # casos de prueba predefinidos
 ```
 
 Para usar Anthropic: `LLM_PROVIDER=anthropic` y `ANTHROPIC_API_KEY` en `.env`.

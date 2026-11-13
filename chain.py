@@ -31,21 +31,23 @@ class RespuestaIncompletaError(Exception):
 # 1. Cliente LLM (OpenAI por defecto; Anthropic con LLM_PROVIDER=anthropic)
 # --------------------------------------------------------------------------- #
 def build_model():
+    # Algunos modelos nuevos rechazan `temperature`; solo se envía si se define LLM_TEMPERATURE.
+    extra = {"temperature": float(os.environ["LLM_TEMPERATURE"])} if os.getenv("LLM_TEMPERATURE") else {}
     provider = os.getenv("LLM_PROVIDER", "openai").lower()
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
         return ChatAnthropic(
             model=os.getenv("LLM_MODEL", "claude-haiku-4-5"),
-            temperature=0,
             max_tokens=1024,
+            **extra,
         )
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(
         model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
-        temperature=0,
         max_tokens=1024,
+        **extra,
     )
 
 
